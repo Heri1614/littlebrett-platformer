@@ -2,124 +2,127 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>LittleBrett Platformer</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
     body {
+      margin: 0;
       overflow: hidden;
     }
     canvas {
       display: block;
-      background: #000;
+      background: url('bg.png') repeat-x;
+      background-size: cover;
     }
-    .controls {
+    #startButton {
       position: absolute;
-      bottom: 10px;
+      top: 50%;
       left: 50%;
-      transform: translateX(-50%);
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      cursor: pointer;
+    }
+    #touchControls {
+      position: absolute;
+      bottom: 20px;
+      width: 100%;
       display: flex;
+      justify-content: center;
       gap: 20px;
       z-index: 10;
     }
-    .controls img {
+    .touch-btn {
       width: 60px;
       height: 60px;
+      opacity: 0.7;
     }
   </style>
 </head>
 <body>
-  <canvas id="game"></canvas>
-  <div class="controls">
-    <img src="btn_left.png" id="btnLeft" />
-    <img src="btn_jump.png" id="btnJump" />
-    <img src="btn_right.png" id="btnRight" />
+  <img id="startButton" src="btn_start.png" alt="Start Game" />
+  <div id="touchControls" style="display: none;">
+    <img src="btn_left.png" class="touch-btn" id="leftBtn" />
+    <img src="btn_jump.png" class="touch-btn" id="jumpBtn" />
+    <img src="btn_right.png" class="touch-btn" id="rightBtn" />
   </div>
+  <canvas></canvas>
   <script>
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
+    const canvas = document.querySelector("canvas");
+    const ctx = canvas.getContext("2d");
+    const startButton = document.getElementById("startButton");
+    const touchControls = document.getElementById("touchControls");
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const gravity = 1;
+    let images = {};
+    const imageSources = {
+      brett_idle: "brett_idle.png",
+      brett_walk1: "brett_walk1.png",
+      brett_jump: "brett_jump.png",
+      brett_fall: "brett_fall.png",
+      brett_happy: "brett_happy.png",
+      brett_down: "brett_down.png",
+      platform: "platform_green.png",
+      coin: "coin.png",
+      btc: "btc.png",
+      eth: "eth.png"
+    };
 
-    const images = {};
-    const imageNames = [
-      'bg', 'platform_green', 'coin', 'btc', 'eth',
-      'brett_idle', 'brett_walk1', 'brett_jump', 'brett_fall', 'brett_happy', 'brett_down', 'btn_start'
-    ];
+    let keys = { left: false, right: false, up: false };
 
-    let loadedImages = 0;
-
-    imageNames.forEach(name => {
-      const img = new Image();
-      img.src = `${name}.png`;
-      img.onload = () => {
-        loadedImages++;
-        if (loadedImages === imageNames.length) init();
-      };
-      images[name] = img;
+    Object.entries(imageSources).forEach(([key, src]) => {
+      images[key] = new Image();
+      images[key].src = src;
     });
-
-    let player, platforms, coins, scrollX = 0, gameStarted = false, gameOver = false, gameWin = false;
 
     class Player {
       constructor() {
         this.x = 100;
-        this.y = canvas.height - 200;
+        this.y = 100;
+        this.width = 60;
+        this.height = 60;
         this.vx = 0;
         this.vy = 0;
-        this.width = 80;
-        this.height = 80;
         this.onGround = false;
+        this.image = images.brett_idle;
       }
-      draw() {
-        let img = images.brett_idle;
-        if (this.vy < 0) img = images.brett_jump;
-        else if (this.vy > 0) img = images.brett_fall;
-        else if (this.vx !== 0) img = images.brett_walk1;
-        ctx.drawImage(img, this.x - scrollX, this.y, this.width, this.height);
-      }
+
       update() {
-        this.vy += gravity;
+        this.vx = 0;
+        if (keys.left) this.vx = -5;
+        if (keys.right) this.vx = 5;
+        if (keys.up && this.onGround) {
+          this.vy = -15;
+          this.onGround = false;
+        }
+
+        this.vy += 1; // gravity
         this.x += this.vx;
         this.y += this.vy;
 
-        this.onGround = false;
-        for (let plat of platforms) {
-          if (
-            this.y + this.height <= plat.y &&
-            this.y + this.height + this.vy >= plat.y &&
-            this.x + this.width > plat.x &&
-            this.x < plat.x + plat.width
-          ) {
-            this.vy = 0;
-            this.y = plat.y - this.height;
-            this.onGround = true;
-          }
+        if (!this.onGround) {
+          this.image = this.vy < 0 ? images.brett_jump : images.brett_fall;
+        } else {
+          this.image = this.vx === 0 ? images.brett_idle : images.brett_walk1;
         }
 
-        coins = coins.filter(coin => {
-          const caught =
-            this.x < coin.x + coin.size &&
-            this.x + this.width > coin.x &&
-            this.y < coin.y + coin.size &&
-            this.y + this.height > coin.y;
-          return !caught;
-        });
+        // camera scroll
+        scrollX = -this.x + canvas.width / 2;
 
-        scrollX = this.x - 100;
-
+        // fall off screen
         if (this.y > canvas.height) {
           gameOver = true;
+          gameEndImage = images.brett_down;
         }
-        if (this.x > platforms[platforms.length - 1].x + 100) {
-          gameWin = true;
+
+        if (this.x > platforms[platforms.length - 1].x + 200) {
+          gameOver = true;
+          gameEndImage = images.brett_happy;
         }
+      }
+
+      draw() {
+        ctx.drawImage(this.image, this.x + scrollX, this.y, this.width, this.height);
       }
     }
 
@@ -128,10 +131,11 @@
         this.x = x;
         this.y = y;
         this.width = 120;
-        this.height = 20;
+        this.height = 30;
       }
+
       draw() {
-        ctx.drawImage(images.platform_green, this.x - scrollX, this.y);
+        ctx.drawImage(images.platform, this.x + scrollX, this.y, this.width, this.height);
       }
     }
 
@@ -139,82 +143,107 @@
       constructor(x, y, type) {
         this.x = x;
         this.y = y;
-        this.size = 32;
         this.type = type;
+        this.collected = false;
       }
+
       draw() {
-        ctx.drawImage(images[this.type], this.x - scrollX, this.y, this.size, this.size);
+        if (!this.collected) {
+          ctx.drawImage(images[this.type], this.x + scrollX, this.y, 30, 30);
+        }
+      }
+
+      checkCollect(player) {
+        if (!this.collected &&
+          player.x < this.x + 30 &&
+          player.x + player.width > this.x &&
+          player.y < this.y + 30 &&
+          player.y + player.height > this.y
+        ) {
+          this.collected = true;
+        }
       }
     }
+
+    let player;
+    let platforms = [];
+    let coins = [];
+    let scrollX = 0;
+    let gameOver = false;
+    let gameEndImage = null;
 
     function init() {
       player = new Player();
       platforms = [];
       coins = [];
-
       for (let i = 0; i < 50; i++) {
-        const x = i * 180;
-        const y = canvas.height - 100 - Math.random() * 200;
+        const x = i * 160;
+        const y = 300 + Math.sin(i * 0.5) * 100;
         platforms.push(new Platform(x, y));
-
-        const coinType = i % 3 === 0 ? 'btc' : i % 3 === 1 ? 'eth' : 'coin';
-        coins.push(new Coin(x + 40, y - 40, coinType));
+        const type = i % 3 === 0 ? "btc" : i % 3 === 1 ? "eth" : "coin";
+        coins.push(new Coin(x + 40, y - 40, type));
       }
-
-      animate();
     }
 
     function animate() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(images.bg, 0, 0, canvas.width, canvas.height);
 
-      for (let plat of platforms) plat.draw();
-      for (let coin of coins) coin.draw();
-
-      if (!gameStarted) {
-        ctx.drawImage(images.btn_start, canvas.width / 2 - 100, canvas.height / 2 - 100, 200, 100);
-        requestAnimationFrame(animate);
+      if (gameOver) {
+        ctx.drawImage(gameEndImage, canvas.width / 2 - 100, canvas.height / 2 - 100, 200, 200);
         return;
       }
 
       player.update();
+      platforms.forEach(p => {
+        p.draw();
+        if (
+          player.x + player.width > p.x &&
+          player.x < p.x + p.width &&
+          player.y + player.height > p.y &&
+          player.y + player.height < p.y + p.height &&
+          player.vy >= 0
+        ) {
+          player.y = p.y - player.height;
+          player.vy = 0;
+          player.onGround = true;
+        }
+      });
+
+      coins.forEach(c => {
+        c.checkCollect(player);
+        c.draw();
+      });
+
       player.draw();
-
-      if (gameOver) {
-        ctx.drawImage(images.brett_down, canvas.width / 2 - 100, canvas.height / 2 - 100);
-        return;
-      }
-
-      if (gameWin) {
-        ctx.drawImage(images.brett_happy, canvas.width / 2 - 100, canvas.height / 2 - 100);
-        return;
-      }
-
       requestAnimationFrame(animate);
     }
 
-    window.addEventListener('keydown', e => {
-      if (!gameStarted) {
-        gameStarted = true;
-        animate();
-      }
-      if (e.key === 'ArrowRight') player.vx = 5;
-      if (e.key === 'ArrowLeft') player.vx = -5;
-      if (e.key === ' ' && player.onGround) player.vy = -20;
+    document.addEventListener("keydown", e => {
+      if (e.key === "ArrowLeft") keys.left = true;
+      if (e.key === "ArrowRight") keys.right = true;
+      if (e.key === " " || e.key === "ArrowUp") keys.up = true;
     });
 
-    window.addEventListener('keyup', e => {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') player.vx = 0;
+    document.addEventListener("keyup", e => {
+      if (e.key === "ArrowLeft") keys.left = false;
+      if (e.key === "ArrowRight") keys.right = false;
+      if (e.key === " " || e.key === "ArrowUp") keys.up = false;
     });
 
-    // Móviles
-    document.getElementById('btnLeft').addEventListener('touchstart', () => player.vx = -5);
-    document.getElementById('btnRight').addEventListener('touchstart', () => player.vx = 5);
-    document.getElementById('btnJump').addEventListener('touchstart', () => {
-      if (player.onGround) player.vy = -20;
+    // Touch controls
+    document.getElementById("leftBtn")?.addEventListener("touchstart", () => keys.left = true);
+    document.getElementById("leftBtn")?.addEventListener("touchend", () => keys.left = false);
+    document.getElementById("rightBtn")?.addEventListener("touchstart", () => keys.right = true);
+    document.getElementById("rightBtn")?.addEventListener("touchend", () => keys.right = false);
+    document.getElementById("jumpBtn")?.addEventListener("touchstart", () => keys.up = true);
+    document.getElementById("jumpBtn")?.addEventListener("touchend", () => keys.up = false);
+
+    startButton.addEventListener("click", () => {
+      startButton.style.display = "none";
+      touchControls.style.display = "flex";
+      init();
+      animate();
     });
-    document.getElementById('btnLeft').addEventListener('touchend', () => player.vx = 0);
-    document.getElementById('btnRight').addEventListener('touchend', () => player.vx = 0);
   </script>
 </body>
 </html>
