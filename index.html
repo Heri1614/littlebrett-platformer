@@ -2,215 +2,229 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>LittleBrett Platformer</title>
   <style>
-    body {
+    html, body {
       margin: 0;
+      padding: 0;
       overflow: hidden;
-      background: #000;
+      background: black;
     }
     canvas {
       display: block;
     }
+    #startButton {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
+  <img id="startButton" src="img/ui/btn_start.png" width="150"/>
+
   <canvas id="gameCanvas"></canvas>
 
   <script>
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
-
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    let gameStarted = false;
-    let gameOver = false;
-
-    const images = {};
-    const imagePaths = {
-      bg: "img/backgrounds/bg.png",
-      btn_start: "img/ui/btn_start.png",
-      player_idle: "img/player/brett_idle.png",
-      player_jump: "img/player/brett_jump.png",
-      player_fall: "img/player/brett_fall.png",
-      player_walk: "img/player/brett_walk1.png",
-      platform_green: "img/platforms/platform_green.png",
-      platform_red: "img/platforms/platform_red.png"
+    const startButton = document.getElementById('startButton');
+    startButton.onclick = () => {
+      startButton.style.display = 'none';
+      init();
     };
+
+    // Assets
+    const background = new Image();
+    background.src = "img/backgrounds/bg.png";
+
+    const playerSprites = {
+      idle: "img/player/brett_idle.png",
+      walk1: "img/player/brett_walk1.png",
+      walk2: "img/player/brett_walk2.png",
+      jump: "img/player/brett_jump.png",
+      fall: "img/player/brett_fall.png"
+    };
+
+    const platformGreen = new Image();
+    platformGreen.src = "img/platforms/platform_green.png";
+
+    const platformRed = new Image();
+    platformRed.src = "img/platforms/platform_red.png";
+
+    const playerImg = new Image();
+    playerImg.src = playerSprites.idle;
+
+    const GRAVITY = 1.2;
+    const JUMP_FORCE = -18;
+    const MOVE_SPEED = 8;
 
     let player = {
       x: 100,
-      y: 100,
-      width: 60,
-      height: 60,
-      dy: 0,
-      onGround: false,
-      img: null
+      y: 300,
+      vx: 0,
+      vy: 0,
+      width: 80,
+      height: 80,
+      grounded: false,
+      sprite: playerImg
     };
 
-    const GRAVITY = 1;
-    const JUMP_FORCE = -18;
-    const SCROLL_SPEED = 5;
-
+    let keys = {};
     let platforms = [];
+    let gameOver = false;
+    let scrollX = 0;
 
-    function loadImages(paths, callback) {
-      let loaded = 0;
-      let count = Object.keys(paths).length;
-      for (let key in paths) {
-        images[key] = new Image();
-        images[key].src = paths[key];
-        images[key].onload = () => {
-          loaded++;
-          if (loaded === count) callback();
-        };
-      }
-    }
-
-    function resetGame() {
-      player.x = 100;
-      player.y = canvas.height - 200;
-      player.dy = 0;
-      player.onGround = false;
-      gameOver = false;
+    function createPlatforms() {
       platforms = [];
-
-      for (let i = 0; i < 20; i++) {
-        generatePlatform(i * 200);
+      let x = 100;
+      for (let i = 0; i < 50; i++) {
+        let y = canvas.height - Math.random() * 300 - 100;
+        let type = Math.random() < 0.2 ? "red" : "green";
+        platforms.push({
+          x: x,
+          y: y,
+          width: 100,
+          height: 20,
+          type: type
+        });
+        x += 250;
       }
     }
 
-    function generatePlatform(x) {
-      const y = canvas.height - Math.random() * 200 - 100;
-      const type = Math.random() < 0.8 ? "green" : "red";
-      platforms.push({
-        x,
-        y,
-        width: 120,
-        height: 20,
-        type
-      });
+    function init() {
+      createPlatforms();
+      player.x = 100;
+      player.y = 300;
+      player.vx = 0;
+      player.vy = 0;
+      scrollX = 0;
+      gameOver = false;
+      requestAnimationFrame(gameLoop);
     }
 
-    function drawBackground(scrollX) {
-      ctx.drawImage(images.bg, -scrollX * 0.5, 0, canvas.width * 2, canvas.height);
-    }
+    function update() {
+      // Movimiento horizontal
+      if (keys['ArrowRight'] || keys['d']) {
+        player.vx = MOVE_SPEED;
+        player.sprite.src = playerSprites.walk1;
+      } else if (keys['ArrowLeft'] || keys['a']) {
+        player.vx = -MOVE_SPEED;
+        player.sprite.src = playerSprites.walk2;
+      } else {
+        player.vx = 0;
+        player.sprite.src = playerSprites.idle;
+      }
 
-    function drawPlayer() {
-      ctx.drawImage(player.img, player.x - cameraX, player.y, player.width, player.height);
-    }
+      // Gravedad
+      player.vy += GRAVITY;
+      player.grounded = false;
 
-    function drawPlatforms() {
-      platforms.forEach(p => {
-        const img = p.type === "green" ? images.platform_green : images.platform_red;
-        ctx.drawImage(img, p.x - cameraX, p.y, p.width, p.height);
-      });
-    }
+      // Movimiento
+      player.x += player.vx;
+      player.y += player.vy;
 
-    function checkCollisions() {
-      player.onGround = false;
+      // Colisiones
       platforms.forEach(p => {
         if (
           player.x + player.width > p.x &&
           player.x < p.x + p.width &&
           player.y + player.height > p.y &&
           player.y + player.height < p.y + p.height + 20 &&
-          player.dy >= 0
+          player.vy > 0
         ) {
           if (p.type === "red") {
             gameOver = true;
           } else {
+            player.grounded = true;
+            player.vy = 0;
             player.y = p.y - player.height;
-            player.dy = 0;
-            player.onGround = true;
           }
         }
       });
 
+      // Fuera del mapa
       if (player.y > canvas.height) {
         gameOver = true;
       }
-    }
 
-    function update() {
-      if (gameOver) return;
-
-      player.img = player.onGround ? images.player_walk : (player.dy < 0 ? images.player_jump : images.player_fall);
-
-      player.y += player.dy;
-      player.dy += GRAVITY;
-
-      if (player.onGround && keys["Space"]) {
-        player.dy = JUMP_FORCE;
+      // Scroll lateral
+      if (player.x - scrollX > canvas.width / 2) {
+        scrollX = player.x - canvas.width / 2;
       }
 
-      player.x += SCROLL_SPEED;
-      cameraX = player.x - 150;
-
-      if (platforms[platforms.length - 1].x - cameraX < canvas.width) {
-        generatePlatform(platforms[platforms.length - 1].x + 200);
+      // Saltar
+      if ((keys[' '] || keys['ArrowUp'] || keys['w']) && player.grounded) {
+        player.vy = JUMP_FORCE;
+        player.grounded = false;
+        player.sprite.src = playerSprites.jump;
       }
-
-      checkCollisions();
     }
 
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawBackground(cameraX);
-      drawPlatforms();
-      drawPlayer();
 
+      // Fondo
+      ctx.drawImage(background, -scrollX * 0.5, 0, canvas.width * 2, canvas.height);
+
+      // Plataformas
+      platforms.forEach(p => {
+        const img = p.type === "red" ? platformRed : platformGreen;
+        ctx.drawImage(img, p.x - scrollX, p.y, p.width, p.height);
+      });
+
+      // Jugador
+      ctx.drawImage(player.sprite, player.x - scrollX, player.y, player.width, player.height);
+
+      // Game Over
       if (gameOver) {
-        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#fff";
-        ctx.font = "60px Arial";
+        ctx.font = "48px Arial";
         ctx.textAlign = "center";
-        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2);
+        ctx.fillText("Game Over", canvas.width / 2, canvas.height / 2);
       }
     }
 
-    function loop() {
-      requestAnimationFrame(loop);
-      if (gameStarted && !gameOver) update();
-      draw();
+    function gameLoop() {
+      if (!gameOver) {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+      } else {
+        draw(); // mostrar pantalla final
+      }
     }
 
-    const keys = {};
-    window.addEventListener("keydown", e => keys[e.code] = true);
-    window.addEventListener("keyup", e => keys[e.code] = false);
+    // Controles teclado
+    window.addEventListener("keydown", e => keys[e.key] = true);
+    window.addEventListener("keyup", e => keys[e.key] = false);
 
-    let cameraX = 0;
-
-    function startScreen() {
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(images.bg, 0, 0, canvas.width, canvas.height);
-      ctx.drawImage(images.btn_start, canvas.width / 2 - 150, canvas.height / 2 - 50, 300, 100);
-
-      canvas.addEventListener("click", function handleStartClick(e) {
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-
-        if (
-          x > canvas.width / 2 - 150 &&
-          x < canvas.width / 2 + 150 &&
-          y > canvas.height / 2 - 50 &&
-          y < canvas.height / 2 + 50
-        ) {
-          gameStarted = true;
-          resetGame();
-          canvas.removeEventListener("click", handleStartClick);
-        }
-      });
-    }
-
-    loadImages(imagePaths, () => {
-      player.img = images.player_idle;
-      startScreen();
-      loop();
+    // Controles touch
+    let touchStartX = null;
+    window.addEventListener("touchstart", e => {
+      touchStartX = e.touches[0].clientX;
+      if (player.grounded) {
+        player.vy = JUMP_FORCE;
+        player.grounded = false;
+        player.sprite.src = playerSprites.jump;
+      }
+    });
+    window.addEventListener("touchmove", e => {
+      let dx = e.touches[0].clientX - touchStartX;
+      if (dx > 30) keys['ArrowRight'] = true;
+      else if (dx < -30) keys['ArrowLeft'] = true;
+    });
+    window.addEventListener("touchend", () => {
+      keys['ArrowRight'] = false;
+      keys['ArrowLeft'] = false;
     });
   </script>
 </body>
