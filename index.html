@@ -2,158 +2,172 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Littlebrett: Surf & Jump</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    canvas { display: block; background: url('bg.png') no-repeat center center; background-size: cover; }
+    canvas { display: block; background: #000; }
   </style>
 </head>
 <body>
-  <canvas id="gameCanvas" width="960" height="540"></canvas>
+  <canvas id="game"></canvas>
+
   <script>
-    const canvas = document.getElementById("gameCanvas");
+    const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 
-    const gravity = 0.5;
-    const jumpStrength = -12;
-    const moveSpeed = 5;
-
-    let cameraX = 0;
-
-    const brett = {
-      x: 100,
-      y: 300,
-      width: 60,
-      height: 60,
-      dx: 0,
-      dy: 0,
-      grounded: false,
-      img: new Image(),
+    // Load images
+    const images = {};
+    const loadImage = (name, src) => {
+      return new Promise(resolve => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => {
+          images[name] = img;
+          resolve();
+        };
+      });
     };
-    brett.img.src = "brett_idle.png";
 
-    const keys = {};
-    document.addEventListener("keydown", (e) => keys[e.code] = true);
-    document.addEventListener("keyup", (e) => keys[e.code] = false);
+    const loadAllImages = async () => {
+      await Promise.all([
+        loadImage("bg", "img/backgrounds/bg.png"),
+        loadImage("brett_idle", "img/player/brett_idle.png"),
+        loadImage("brett_jump", "img/player/brett_jump.png"),
+        loadImage("platform_green", "img/platforms/platform_green.png"),
+        loadImage("platform_red", "img/platforms/platform_red.png"),
+        loadImage("coin", "img/collectibles/coin.png"),
+      ]);
+    };
 
-    const platforms = [];
-    for (let i = 0; i < 50; i++) {
-      const height = Math.random() * 150 + 200;
-      platforms.push({
-        x: i * 200,
-        y: height,
-        width: 120,
-        height: 20,
-        isRed: Math.random() < 0.2, // 20% chance sea peligrosa
-      });
-    }
-
-    const collectibles = platforms.map(p => ({
-      x: p.x + p.width / 2 - 10,
-      y: p.y - 40,
-      width: 20,
-      height: 20,
-      collected: false,
-    }));
-
-    const coinImg = new Image();
-    coinImg.src = "coin.png";
-
-    const redPlatform = new Image();
-    redPlatform.src = "platform_red.png";
-
-    const greenPlatform = new Image();
-    greenPlatform.src = "platform_green.png";
-
-    let gameOver = false;
-
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      ctx.save();
-      ctx.translate(-cameraX, 0);
-
-      // Draw platforms
-      platforms.forEach(p => {
-        const img = p.isRed ? redPlatform : greenPlatform;
-        ctx.drawImage(img, p.x, p.y, p.width, p.height);
-      });
-
-      // Draw collectibles
-      collectibles.forEach(c => {
-        if (!c.collected) ctx.drawImage(coinImg, c.x, c.y, c.width, c.height);
-      });
-
-      // Draw Brett
-      ctx.drawImage(brett.img, brett.x, brett.y, brett.width, brett.height);
-
-      ctx.restore();
-    }
-
-    function update() {
-      if (gameOver) return;
-
-      brett.dx = 0;
-      if (keys["ArrowRight"]) brett.dx = moveSpeed;
-      if (keys["ArrowLeft"]) brett.dx = -moveSpeed;
-
-      if (keys["Space"] && brett.grounded) {
-        brett.dy = jumpStrength;
-        brett.grounded = false;
+    class Player {
+      constructor() {
+        this.x = 100;
+        this.y = 300;
+        this.width = 64;
+        this.height = 64;
+        this.vx = 0;
+        this.vy = 0;
+        this.onGround = false;
       }
 
-      brett.dy += gravity;
-      brett.x += brett.dx;
-      brett.y += brett.dy;
+      draw() {
+        const sprite = this.vy < 0 ? images.brett_jump : images.brett_idle;
+        ctx.drawImage(sprite, this.x - camera.x, this.y, this.width, this.height);
+      }
 
-      brett.grounded = false;
-      platforms.forEach(p => {
-        if (
-          brett.x + brett.width > p.x &&
-          brett.x < p.x + p.width &&
-          brett.y + brett.height > p.y &&
-          brett.y + brett.height < p.y + p.height &&
-          brett.dy > 0
-        ) {
-          brett.y = p.y - brett.height;
-          brett.dy = 0;
-          brett.grounded = true;
+      update() {
+        this.vy += 1; // gravity
+        this.y += this.vy;
+        this.x += this.vx;
 
-          if (p.isRed) gameOver = true;
+        // Check collisions
+        this.onGround = false;
+        platforms.forEach(p => {
+          if (
+            this.x + this.width > p.x &&
+            this.x < p.x + p.width &&
+            this.y + this.height > p.y &&
+            this.y + this.height < p.y + p.height &&
+            this.vy >= 0
+          ) {
+            if (p.type === "green") {
+              this.vy = 0;
+              this.y = p.y - this.height;
+              this.onGround = true;
+            } else if (p.type === "red") {
+              gameOver = true;
+            }
+          }
+        });
+
+        // Fall out
+        if (this.y > canvas.height + 100) {
+          gameOver = true;
         }
-      });
 
-      if (brett.y > canvas.height) gameOver = true;
-
-      collectibles.forEach(c => {
-        if (!c.collected &&
-          brett.x + brett.width > c.x &&
-          brett.x < c.x + c.width &&
-          brett.y + brett.height > c.y &&
-          brett.y < c.y + c.height
-        ) {
-          c.collected = true;
-        }
-      });
-
-      // Bloquear retroceso
-      if (brett.x < cameraX) brett.x = cameraX;
-
-      // Seguir a Brett con la cámara
-      cameraX = Math.max(brett.x - 150, 0);
-
-      if (brett.x > 200 * 49 + 150) alert("¡Felicidades! Nivel completado.");
+        // Move camera
+        camera.x = this.x - 150;
+      }
     }
 
-    function loop() {
-      update();
-      draw();
-      if (!gameOver) requestAnimationFrame(loop);
-      else alert("Game Over");
+    class Platform {
+      constructor(x, y, type = "green") {
+        this.x = x;
+        this.y = y;
+        this.width = 100;
+        this.height = 20;
+        this.type = type;
+      }
+
+      draw() {
+        const img = this.type === "green" ? images.platform_green : images.platform_red;
+        ctx.drawImage(img, this.x - camera.x, this.y, this.width, this.height);
+      }
     }
 
-    loop();
+    let player = new Player();
+    let camera = { x: 0 };
+    let platforms = [];
+    let gameOver = false;
+
+    const initPlatforms = () => {
+      platforms = [];
+      let x = 50;
+      let y = 400;
+
+      for (let i = 0; i < 50; i++) {
+        let type = i % 7 === 0 ? "red" : "green";
+        platforms.push(new Platform(x, y, type));
+        x += 150 + Math.random() * 50;
+        y = 300 + Math.sin(i * 0.5) * 60;
+      }
+    };
+
+    const drawBackground = () => {
+      ctx.drawImage(images.bg, -camera.x * 0.5, 0, canvas.width * 2, canvas.height);
+    };
+
+    const drawGameOver = () => {
+      ctx.fillStyle = "white";
+      ctx.font = "48px Arial";
+      ctx.fillText("Game Over", canvas.width / 2 - 120, canvas.height / 2);
+    };
+
+    const gameLoop = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBackground();
+
+      platforms.forEach(p => p.draw());
+      player.update();
+      player.draw();
+
+      if (gameOver) {
+        drawGameOver();
+      } else {
+        requestAnimationFrame(gameLoop);
+      }
+    };
+
+    document.addEventListener("keydown", e => {
+      if (e.code === "ArrowRight") player.vx = 4;
+      if (e.code === "ArrowLeft") player.vx = -4;
+      if (e.code === "Space" && player.onGround) player.vy = -18;
+    });
+
+    document.addEventListener("keyup", e => {
+      if (e.code === "ArrowRight" || e.code === "ArrowLeft") player.vx = 0;
+    });
+
+    const startGame = async () => {
+      await loadAllImages();
+      initPlatforms();
+      gameLoop();
+    };
+
+    startGame();
   </script>
 </body>
 </html>
