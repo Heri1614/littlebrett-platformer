@@ -1,206 +1,159 @@
-<!--
-  LITTLEBRETT: SURF & JUMP
-  -------------------------
-  Controles para PC:
-    - Flechas izquierda/derecha: mover personaje
-    - Espacio: saltar
-
-  Controles para celular:
-    - Tocar izquierda/derecha de la pantalla: mover
-    - Tocar parte superior: saltar
-
-  Estructura de carpetas esperada:
-  /img/player/brett_idle.png
-  /img/player/brett_walk1.png
-  /img/player/brett_jump.png
-  /img/player/brett_fall.png
-  /img/platforms/platform_green.png
-  /img/platforms/platform_red.png
-  /img/backgrounds/bg.png
-  /img/collectibles/coin.png
-  /img/collectibles/btc.png
-  /img/collectibles/eth.png
-  /img/ui/btn_start.png
--->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Littlebrett: Surf & Jump</title>
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-    }
-    canvas {
-      display: block;
-      background-color: #000;
-    }
-    #startScreen {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: #000;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 2;
-    }
-    #startButton {
-      width: 250px;
-      cursor: pointer;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    canvas { display: block; background: url('bg.png') no-repeat center center; background-size: cover; }
   </style>
 </head>
 <body>
-  <div id="startScreen">
-    <img id="startButton" src="img/ui/btn_start.png" alt="Play Game">
-  </div>
-  <canvas id="gameCanvas"></canvas>
+  <canvas id="gameCanvas" width="960" height="540"></canvas>
   <script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const gravity = 0.5;
+    const jumpStrength = -12;
+    const moveSpeed = 5;
+
+    let cameraX = 0;
+
+    const brett = {
+      x: 100,
+      y: 300,
+      width: 60,
+      height: 60,
+      dx: 0,
+      dy: 0,
+      grounded: false,
+      img: new Image(),
+    };
+    brett.img.src = "brett_idle.png";
 
     const keys = {};
-    let gameStarted = false;
+    document.addEventListener("keydown", (e) => keys[e.code] = true);
+    document.addEventListener("keyup", (e) => keys[e.code] = false);
 
-    document.addEventListener('keydown', e => keys[e.key] = true);
-    document.addEventListener('keyup', e => keys[e.key] = false);
-
-    canvas.addEventListener("touchstart", e => {
-      const x = e.touches[0].clientX;
-      const y = e.touches[0].clientY;
-      if (y < canvas.height / 2) keys[' '] = true;
-      else if (x < canvas.width / 2) keys['ArrowLeft'] = true;
-      else keys['ArrowRight'] = true;
-    });
-    canvas.addEventListener("touchend", e => {
-      keys[' '] = false;
-      keys['ArrowLeft'] = false;
-      keys['ArrowRight'] = false;
-    });
-
-    const images = {};
-    const toLoad = [
-      ['bg', 'img/backgrounds/bg.png'],
-      ['platform_green', 'img/platforms/platform_green.png'],
-      ['platform_red', 'img/platforms/platform_red.png'],
-      ['brett_idle', 'img/player/brett_idle.png'],
-      ['brett_walk1', 'img/player/brett_walk1.png'],
-      ['brett_jump', 'img/player/brett_jump.png'],
-      ['brett_fall', 'img/player/brett_fall.png'],
-      ['coin', 'img/collectibles/coin.png'],
-      ['btc', 'img/collectibles/btc.png'],
-      ['eth', 'img/collectibles/eth.png']
-    ];
-
-    let loaded = 0;
-    for (let [key, src] of toLoad) {
-      const img = new Image();
-      img.src = src;
-      img.onload = () => {
-        loaded++;
-        if (loaded === toLoad.length) startGame();
-      };
-      images[key] = img;
+    const platforms = [];
+    for (let i = 0; i < 50; i++) {
+      const height = Math.random() * 150 + 200;
+      platforms.push({
+        x: i * 200,
+        y: height,
+        width: 120,
+        height: 20,
+        isRed: Math.random() < 0.2, // 20% chance sea peligrosa
+      });
     }
 
-    const player = {
-      x: 100,
-      y: 0,
-      width: 80,
-      height: 80,
-      vx: 0,
-      vy: 0,
-      grounded: false
-    };
+    const collectibles = platforms.map(p => ({
+      x: p.x + p.width / 2 - 10,
+      y: p.y - 40,
+      width: 20,
+      height: 20,
+      collected: false,
+    }));
 
-    const gravity = 1.2;
-    const jumpStrength = -18;
-    const platforms = [
-      {x: 0, y: canvas.height - 60, width: canvas.width, type: 'green'},
-      {x: 400, y: canvas.height - 160, width: 200, type: 'red'},
-      {x: 700, y: canvas.height - 260, width: 200, type: 'green'}
-    ];
+    const coinImg = new Image();
+    coinImg.src = "coin.png";
 
-    function drawBackground() {
-      ctx.drawImage(images.bg, 0, 0, canvas.width, canvas.height);
-    }
+    const redPlatform = new Image();
+    redPlatform.src = "platform_red.png";
 
-    function drawPlatforms() {
-      for (let p of platforms) {
-        const img = images[`platform_${p.type}`];
-        ctx.drawImage(img, p.x, p.y, p.width, 30);
-      }
-    }
+    const greenPlatform = new Image();
+    greenPlatform.src = "platform_green.png";
 
-    function drawPlayer() {
-      let sprite = 'brett_idle';
-      if (!player.grounded) sprite = player.vy < 0 ? 'brett_jump' : 'brett_fall';
-      else if (player.vx !== 0) sprite = 'brett_walk1';
-      ctx.drawImage(images[sprite], player.x, player.y, player.width, player.height);
-    }
+    let gameOver = false;
 
-    function updatePlayer() {
-      if (keys['ArrowLeft']) player.vx = -6;
-      else if (keys['ArrowRight']) player.vx = 6;
-      else player.vx = 0;
-
-      if (keys[' '] && player.grounded) {
-        player.vy = jumpStrength;
-        player.grounded = false;
-      }
-
-      player.vy += gravity;
-      player.x += player.vx;
-      player.y += player.vy;
-
-      player.grounded = false;
-      for (let plat of platforms) {
-        if (
-          player.x + player.width > plat.x &&
-          player.x < plat.x + plat.width &&
-          player.y + player.height >= plat.y &&
-          player.y + player.height <= plat.y + 30
-        ) {
-          if (plat.type === 'red') {
-            alert("Game Over: tocaste una vela roja bajista ☠️");
-            window.location.reload();
-            return;
-          }
-          player.y = plat.y - player.height;
-          player.vy = 0;
-          player.grounded = true;
-        }
-      }
-    }
-
-    function gameLoop() {
+    function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawBackground();
-      drawPlatforms();
-      updatePlayer();
-      drawPlayer();
-      requestAnimationFrame(gameLoop);
+
+      ctx.save();
+      ctx.translate(-cameraX, 0);
+
+      // Draw platforms
+      platforms.forEach(p => {
+        const img = p.isRed ? redPlatform : greenPlatform;
+        ctx.drawImage(img, p.x, p.y, p.width, p.height);
+      });
+
+      // Draw collectibles
+      collectibles.forEach(c => {
+        if (!c.collected) ctx.drawImage(coinImg, c.x, c.y, c.width, c.height);
+      });
+
+      // Draw Brett
+      ctx.drawImage(brett.img, brett.x, brett.y, brett.width, brett.height);
+
+      ctx.restore();
     }
 
-    document.getElementById("startButton").onclick = () => {
-      document.getElementById("startScreen").style.display = "none";
-      if (loaded === toLoad.length) startGame();
-    };
+    function update() {
+      if (gameOver) return;
 
-    function startGame() {
-      if (!gameStarted) {
-        gameStarted = true;
-        requestAnimationFrame(gameLoop);
+      brett.dx = 0;
+      if (keys["ArrowRight"]) brett.dx = moveSpeed;
+      if (keys["ArrowLeft"]) brett.dx = -moveSpeed;
+
+      if (keys["Space"] && brett.grounded) {
+        brett.dy = jumpStrength;
+        brett.grounded = false;
       }
+
+      brett.dy += gravity;
+      brett.x += brett.dx;
+      brett.y += brett.dy;
+
+      brett.grounded = false;
+      platforms.forEach(p => {
+        if (
+          brett.x + brett.width > p.x &&
+          brett.x < p.x + p.width &&
+          brett.y + brett.height > p.y &&
+          brett.y + brett.height < p.y + p.height &&
+          brett.dy > 0
+        ) {
+          brett.y = p.y - brett.height;
+          brett.dy = 0;
+          brett.grounded = true;
+
+          if (p.isRed) gameOver = true;
+        }
+      });
+
+      if (brett.y > canvas.height) gameOver = true;
+
+      collectibles.forEach(c => {
+        if (!c.collected &&
+          brett.x + brett.width > c.x &&
+          brett.x < c.x + c.width &&
+          brett.y + brett.height > c.y &&
+          brett.y < c.y + c.height
+        ) {
+          c.collected = true;
+        }
+      });
+
+      // Bloquear retroceso
+      if (brett.x < cameraX) brett.x = cameraX;
+
+      // Seguir a Brett con la cámara
+      cameraX = Math.max(brett.x - 150, 0);
+
+      if (brett.x > 200 * 49 + 150) alert("¡Felicidades! Nivel completado.");
     }
+
+    function loop() {
+      update();
+      draw();
+      if (!gameOver) requestAnimationFrame(loop);
+      else alert("Game Over");
+    }
+
+    loop();
   </script>
 </body>
 </html>
