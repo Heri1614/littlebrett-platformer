@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LittleBrett Platformer</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #1a1a2e;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #leftBtn, #rightBtn, #jumpBtn {
+      position: fixed;
+      bottom: 10px;
+      background-color: rgba(255, 255, 255, 0.2);
+      border: 2px solid white;
+      border-radius: 8px;
+      color: white;
+      font-size: 16px;
+      padding: 10px 15px;
+      z-index: 10;
+    }
+
+    #leftBtn { left: 10px; }
+    #rightBtn { left: 80px; }
+    #jumpBtn { right: 10px; }
+
+    @media (min-width: 768px) {
+      #leftBtn, #rightBtn, #jumpBtn {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Controles móviles -->
+  <button id="leftBtn">◀</button>
+  <button id="rightBtn">▶</button>
+  <button id="jumpBtn">⤒</button>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const player = {
+      x: 50,
+      y: canvas.height - 150,
+      width: 80,
+      height: 80,
+      vx: 0,
+      vy: 0,
+      speed: 6,
+      jump: -18,
+      gravity: 1.2,
+      onGround: false,
+      image: new Image()
+    };
+
+    player.image.src = 'img/player/littlebrett.png';
+
+    const platforms = [
+      { x: 0, y: canvas.height - 60, width: canvas.width, height: 60, color: 'green' },
+      { x: 300, y: canvas.height - 200, width: 160, height: 40, color: 'red' },
+      { x: 600, y: canvas.height - 300, width: 160, height: 40, color: 'green' }
+    ];
+
+    const platformImages = {
+      red: new Image(),
+      green: new Image()
+    };
+    platformImages.red.src = 'img/platforms/platform_red.png';
+    platformImages.green.src = 'img/platforms/platform_green.png';
+
+    const keys = {
+      left: false,
+      right: false,
+      up: false
+    };
+
+    function update() {
+      // Movimiento horizontal
+      if (keys.left) player.vx = -player.speed;
+      else if (keys.right) player.vx = player.speed;
+      else player.vx = 0;
+
+      // Aplicar gravedad
+      player.vy += player.gravity;
+
+      // Saltar
+      if (keys.up && player.onGround) {
+        player.vy = player.jump;
+        player.onGround = false;
+      }
+
+      // Actualizar posición
+      player.x += player.vx;
+      player.y += player.vy;
+
+      // Colisiones con plataformas
+      player.onGround = false;
+      platforms.forEach(p => {
+        if (
+          player.x < p.x + p.width &&
+          player.x + player.width > p.x &&
+          player.y + player.height < p.y + p.height &&
+          player.y + player.height + player.vy >= p.y
+        ) {
+          player.vy = 0;
+          player.y = p.y - player.height;
+          player.onGround = true;
+        }
+      });
+
+      // Limitar al canvas
+      if (player.y > canvas.height) {
+        player.y = canvas.height - player.height;
+        player.vy = 0;
+        player.onGround = true;
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Dibujar plataformas
+      platforms.forEach(p => {
+        const img = platformImages[p.color];
+        if (img.complete) {
+          ctx.drawImage(img, p.x, p.y, p.width, p.height);
+        } else {
+          ctx.fillStyle = p.color;
+          ctx.fillRect(p.x, p.y, p.width, p.height);
+        }
+      });
+
+      // Dibujar jugador
+      ctx.drawImage(player.image, player.x, player.y, player.width, player.height);
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    // Teclado
+    document.addEventListener('keydown', e => {
+      if (e.code === 'ArrowLeft') keys.left = true;
+      if (e.code === 'ArrowRight') keys.right = true;
+      if (e.code === 'Space') keys.up = true;
+    });
+
+    document.addEventListener('keyup', e => {
+      if (e.code === 'ArrowLeft') keys.left = false;
+      if (e.code === 'ArrowRight') keys.right = false;
+      if (e.code === 'Space') keys.up = false;
+    });
+
+    // Móviles
+    document.getElementById('leftBtn').addEventListener('touchstart', () => keys.left = true);
+    document.getElementById('leftBtn').addEventListener('touchend', () => keys.left = false);
+
+    document.getElementById('rightBtn').addEventListener('touchstart', () => keys.right = true);
+    document.getElementById('rightBtn').addEventListener('touchend', () => keys.right = false);
+
+    document.getElementById('jumpBtn').addEventListener('touchstart', () => {
+      if (player.onGround) {
+        player.vy = player.jump;
+        player.onGround = false;
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+
+    loop();
+  </script>
+</body>
+</html>
