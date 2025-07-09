@@ -1,161 +1,142 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>LittleBrett Platformer</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LittleBrett Game</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      background-color: #87cefa;
-      overflow: hidden;
-    }
-
-    canvas {
-      display: block;
-      background: url('bg.png') no-repeat center center;
-      background-size: cover;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #87cefa; overflow: hidden; }
+    canvas { display: block; }
   </style>
 </head>
 <body>
-  <canvas id="gameCanvas"></canvas>
+<canvas id="gameCanvas"></canvas>
 
-  <script>
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
 
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 
-    // Imagenes
-    const imageSources = {
-      idle: "brett_idle.png",
-      walk: "brett_walk1.png",
-      jump: "brett_jump.png",
-      fall: "brett_fall.png",
-      happy: "brett_happy.png",
-      down: "brett_down.png",
-      coin: "coin.png",
-      btc: "btc.png",
-      eth: "eth.png",
-      meme: "btn_start.png"
-    };
+  const imageSources = {
+    idle: "brett_idle.png",
+    walk: "brett_walk1.png",
+    jump: "brett_jump.png",
+    fall: "brett_fall.png",
+    happy: "brett_happy.png",
+    down: "brett_down.png",
+    coin: "coin.png",
+    btc: "btc.png",
+    eth: "eth.png",
+    meme: "btn_start.png",
+    bg: "bg.png"
+  };
 
-    const images = {};
-    for (const key in imageSources) {
-      const img = new Image();
-      img.src = imageSources[key];
-      images[key] = img;
+  const images = {};
+  let allImagesLoaded = [];
+
+  for (const key in imageSources) {
+    images[key] = new Image();
+    images[key].src = imageSources[key];
+    allImagesLoaded.push(new Promise((resolve) => {
+      images[key].onload = resolve;
+    }));
+  }
+
+  const player = {
+    x: 100,
+    y: canvas.height - 200,
+    width: 100,
+    height: 100,
+    vy: 0,
+    grounded: false,
+    frame: "idle"
+  };
+
+  const gravity = 1.5;
+  const keys = {};
+  const coins = [];
+
+  for (let i = 0; i < 5; i++) {
+    coins.push({
+      x: 300 + i * 300,
+      y: canvas.height - 150,
+      collected: false
+    });
+  }
+
+  function update() {
+    if (keys["ArrowRight"]) {
+      player.x += 7;
+      player.frame = "walk";
+    } else if (keys["ArrowLeft"]) {
+      player.x -= 7;
+      player.frame = "walk";
+    } else {
+      player.frame = "idle";
     }
 
-    const player = {
-      x: 100,
-      y: canvas.height - 200,
-      width: 100,
-      height: 100,
-      vy: 0,
-      grounded: false,
-      frame: "idle"
-    };
-
-    const gravity = 1.5;
-    const keys = {};
-    const coins = [];
-
-    for (let i = 0; i < 5; i++) {
-      coins.push({
-        x: 300 + i * 300,
-        y: canvas.height - 150,
-        collected: false
-      });
+    if (keys[" "] && player.grounded) {
+      player.vy = -25;
+      player.grounded = false;
+      player.frame = "jump";
     }
 
-    function update() {
-      // Movimiento horizontal
-      if (keys["ArrowRight"]) {
-        player.x += 7;
-        player.frame = "walk";
-      } else if (keys["ArrowLeft"]) {
-        player.x -= 7;
-        player.frame = "walk";
-      } else {
-        player.frame = "idle";
+    player.vy += gravity;
+    player.y += player.vy;
+
+    if (player.y + player.height >= canvas.height - 50) {
+      player.y = canvas.height - 50 - player.height;
+      player.vy = 0;
+      player.grounded = true;
+    }
+
+    coins.forEach((coin) => {
+      if (
+        !coin.collected &&
+        player.x < coin.x + 50 &&
+        player.x + player.width > coin.x &&
+        player.y < coin.y + 50 &&
+        player.y + player.height > coin.y
+      ) {
+        coin.collected = true;
       }
+    });
+  }
 
-      // Salto
-      if (keys[" "] && player.grounded) {
-        player.vy = -25;
-        player.grounded = false;
-        player.frame = "jump";
+  function draw() {
+    ctx.drawImage(images.bg, 0, 0, canvas.width, canvas.height);
+    coins.forEach((coin) => {
+      if (!coin.collected) {
+        ctx.drawImage(images.coin, coin.x, coin.y, 50, 50);
+        ctx.drawImage(images.btc, coin.x + 5, coin.y + 5, 12, 12);
+        ctx.drawImage(images.eth, coin.x + 18, coin.y + 5, 12, 12);
+        ctx.drawImage(images.meme, coin.x + 10, coin.y + 25, 20, 15);
       }
-
-      // Gravedad
-      player.vy += gravity;
-      player.y += player.vy;
-
-      // Piso
-      if (player.y + player.height >= canvas.height - 50) {
-        player.y = canvas.height - 50 - player.height;
-        player.vy = 0;
-        player.grounded = true;
-      }
-
-      // Colisiones con monedas
-      coins.forEach((coin) => {
-        if (
-          !coin.collected &&
-          player.x < coin.x + 50 &&
-          player.x + player.width > coin.x &&
-          player.y < coin.y + 50 &&
-          player.y + player.height > coin.y
-        ) {
-          coin.collected = true;
-        }
-      });
-    }
-
-    function drawPlayer() {
-      ctx.drawImage(images[player.frame], player.x, player.y, player.width, player.height);
-    }
-
-    function drawCoins() {
-      coins.forEach((coin) => {
-        if (!coin.collected) {
-          ctx.drawImage(images.coin, coin.x, coin.y, 50, 50);
-          ctx.drawImage(images.btc, coin.x + 5, coin.y + 5, 12, 12);
-          ctx.drawImage(images.eth, coin.x + 18, coin.y + 5, 12, 12);
-          ctx.drawImage(images.meme, coin.x + 10, coin.y + 25, 20, 15);
-        }
-      });
-    }
-
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawCoins();
-      drawPlayer();
-    }
-
-    function gameLoop() {
-      update();
-      draw();
-      requestAnimationFrame(gameLoop);
-    }
-
-    window.addEventListener("keydown", (e) => keys[e.key] = true);
-    window.addEventListener("keyup", (e) => keys[e.key] = false);
-
-    window.addEventListener("resize", () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
     });
 
+    ctx.drawImage(images[player.frame], player.x, player.y, player.width, player.height);
+  }
+
+  function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  // Esperar hasta que se carguen TODAS las imágenes
+  Promise.all(allImagesLoaded).then(() => {
+    window.addEventListener("keydown", (e) => keys[e.key] = true);
+    window.addEventListener("keyup", (e) => keys[e.key] = false);
     gameLoop();
-  </script>
+  });
+
+  window.addEventListener("resize", () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  });
+</script>
 </body>
 </html>
