@@ -14,7 +14,7 @@
       background: url('bg.png') repeat-x;
       background-size: cover;
     }
-    #startButton {
+    #startButton, #restartButton {
       position: absolute;
       top: 50%;
       left: 50%;
@@ -34,12 +34,13 @@
     .touch-btn {
       width: 60px;
       height: 60px;
-      opacity: 0.7;
+      opacity: 1;
     }
   </style>
 </head>
 <body>
   <img id="startButton" src="btn_start.png" alt="Start Game" />
+  <img id="restartButton" src="btn_start.png" alt="Restart Game" style="display: none;" />
   <div id="touchControls" style="display: none;">
     <img src="btn_left.png" class="touch-btn" id="leftBtn" />
     <img src="btn_jump.png" class="touch-btn" id="jumpBtn" />
@@ -50,6 +51,7 @@
     const canvas = document.querySelector("canvas");
     const ctx = canvas.getContext("2d");
     const startButton = document.getElementById("startButton");
+    const restartButton = document.getElementById("restartButton");
     const touchControls = document.getElementById("touchControls");
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -106,18 +108,18 @@
           this.image = this.vx === 0 ? images.brett_idle : images.brett_walk1;
         }
 
-        // camera scroll
         scrollX = -this.x + canvas.width / 2;
 
-        // fall off screen
         if (this.y > canvas.height) {
           gameOver = true;
           gameEndImage = images.brett_down;
+          restartButton.style.display = "block";
         }
 
         if (this.x > platforms[platforms.length - 1].x + 200) {
           gameOver = true;
           gameEndImage = images.brett_happy;
+          restartButton.style.display = "block";
         }
       }
 
@@ -176,6 +178,10 @@
       player = new Player();
       platforms = [];
       coins = [];
+      scrollX = 0;
+      gameOver = false;
+      gameEndImage = null;
+      restartButton.style.display = "none";
       for (let i = 0; i < 50; i++) {
         const x = i * 160;
         const y = 300 + Math.sin(i * 0.5) * 100;
@@ -230,7 +236,6 @@
       if (e.key === " " || e.key === "ArrowUp") keys.up = false;
     });
 
-    // Touch controls
     document.getElementById("leftBtn")?.addEventListener("touchstart", () => keys.left = true);
     document.getElementById("leftBtn")?.addEventListener("touchend", () => keys.left = false);
     document.getElementById("rightBtn")?.addEventListener("touchstart", () => keys.right = true);
@@ -241,6 +246,12 @@
     startButton.addEventListener("click", () => {
       startButton.style.display = "none";
       touchControls.style.display = "flex";
+      init();
+      animate();
+    });
+
+    restartButton.addEventListener("click", () => {
+      restartButton.style.display = "none";
       init();
       animate();
     });
