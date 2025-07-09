@@ -2,172 +2,216 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Littlebrett: Surf & Jump</title>
+  <title>LittleBrett Platformer</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    canvas { display: block; background: #000; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    canvas {
+      display: block;
+    }
   </style>
 </head>
 <body>
-  <canvas id="game"></canvas>
+  <canvas id="gameCanvas"></canvas>
 
   <script>
-    const canvas = document.getElementById("game");
+    const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
+
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // Load images
-    const images = {};
-    const loadImage = (name, src) => {
-      return new Promise(resolve => {
-        const img = new Image();
-        img.src = src;
-        img.onload = () => {
-          images[name] = img;
-          resolve();
-        };
-      });
-    };
-
-    const loadAllImages = async () => {
-      await Promise.all([
-        loadImage("bg", "img/backgrounds/bg.png"),
-        loadImage("brett_idle", "img/player/brett_idle.png"),
-        loadImage("brett_jump", "img/player/brett_jump.png"),
-        loadImage("platform_green", "img/platforms/platform_green.png"),
-        loadImage("platform_red", "img/platforms/platform_red.png"),
-        loadImage("coin", "img/collectibles/coin.png"),
-      ]);
-    };
-
-    class Player {
-      constructor() {
-        this.x = 100;
-        this.y = 300;
-        this.width = 64;
-        this.height = 64;
-        this.vx = 0;
-        this.vy = 0;
-        this.onGround = false;
-      }
-
-      draw() {
-        const sprite = this.vy < 0 ? images.brett_jump : images.brett_idle;
-        ctx.drawImage(sprite, this.x - camera.x, this.y, this.width, this.height);
-      }
-
-      update() {
-        this.vy += 1; // gravity
-        this.y += this.vy;
-        this.x += this.vx;
-
-        // Check collisions
-        this.onGround = false;
-        platforms.forEach(p => {
-          if (
-            this.x + this.width > p.x &&
-            this.x < p.x + p.width &&
-            this.y + this.height > p.y &&
-            this.y + this.height < p.y + p.height &&
-            this.vy >= 0
-          ) {
-            if (p.type === "green") {
-              this.vy = 0;
-              this.y = p.y - this.height;
-              this.onGround = true;
-            } else if (p.type === "red") {
-              gameOver = true;
-            }
-          }
-        });
-
-        // Fall out
-        if (this.y > canvas.height + 100) {
-          gameOver = true;
-        }
-
-        // Move camera
-        camera.x = this.x - 150;
-      }
-    }
-
-    class Platform {
-      constructor(x, y, type = "green") {
-        this.x = x;
-        this.y = y;
-        this.width = 100;
-        this.height = 20;
-        this.type = type;
-      }
-
-      draw() {
-        const img = this.type === "green" ? images.platform_green : images.platform_red;
-        ctx.drawImage(img, this.x - camera.x, this.y, this.width, this.height);
-      }
-    }
-
-    let player = new Player();
-    let camera = { x: 0 };
-    let platforms = [];
+    let gameStarted = false;
     let gameOver = false;
 
-    const initPlatforms = () => {
-      platforms = [];
-      let x = 50;
-      let y = 400;
+    const images = {};
+    const imagePaths = {
+      bg: "img/backgrounds/bg.png",
+      btn_start: "img/ui/btn_start.png",
+      player_idle: "img/player/brett_idle.png",
+      player_jump: "img/player/brett_jump.png",
+      player_fall: "img/player/brett_fall.png",
+      player_walk: "img/player/brett_walk1.png",
+      platform_green: "img/platforms/platform_green.png",
+      platform_red: "img/platforms/platform_red.png"
+    };
 
-      for (let i = 0; i < 50; i++) {
-        let type = i % 7 === 0 ? "red" : "green";
-        platforms.push(new Platform(x, y, type));
-        x += 150 + Math.random() * 50;
-        y = 300 + Math.sin(i * 0.5) * 60;
+    let player = {
+      x: 100,
+      y: 100,
+      width: 60,
+      height: 60,
+      dy: 0,
+      onGround: false,
+      img: null
+    };
+
+    const GRAVITY = 1;
+    const JUMP_FORCE = -18;
+    const SCROLL_SPEED = 5;
+
+    let platforms = [];
+
+    function loadImages(paths, callback) {
+      let loaded = 0;
+      let count = Object.keys(paths).length;
+      for (let key in paths) {
+        images[key] = new Image();
+        images[key].src = paths[key];
+        images[key].onload = () => {
+          loaded++;
+          if (loaded === count) callback();
+        };
       }
-    };
+    }
 
-    const drawBackground = () => {
-      ctx.drawImage(images.bg, -camera.x * 0.5, 0, canvas.width * 2, canvas.height);
-    };
+    function resetGame() {
+      player.x = 100;
+      player.y = canvas.height - 200;
+      player.dy = 0;
+      player.onGround = false;
+      gameOver = false;
+      platforms = [];
 
-    const drawGameOver = () => {
-      ctx.fillStyle = "white";
-      ctx.font = "48px Arial";
-      ctx.fillText("Game Over", canvas.width / 2 - 120, canvas.height / 2);
-    };
+      for (let i = 0; i < 20; i++) {
+        generatePlatform(i * 200);
+      }
+    }
 
-    const gameLoop = () => {
+    function generatePlatform(x) {
+      const y = canvas.height - Math.random() * 200 - 100;
+      const type = Math.random() < 0.8 ? "green" : "red";
+      platforms.push({
+        x,
+        y,
+        width: 120,
+        height: 20,
+        type
+      });
+    }
+
+    function drawBackground(scrollX) {
+      ctx.drawImage(images.bg, -scrollX * 0.5, 0, canvas.width * 2, canvas.height);
+    }
+
+    function drawPlayer() {
+      ctx.drawImage(player.img, player.x - cameraX, player.y, player.width, player.height);
+    }
+
+    function drawPlatforms() {
+      platforms.forEach(p => {
+        const img = p.type === "green" ? images.platform_green : images.platform_red;
+        ctx.drawImage(img, p.x - cameraX, p.y, p.width, p.height);
+      });
+    }
+
+    function checkCollisions() {
+      player.onGround = false;
+      platforms.forEach(p => {
+        if (
+          player.x + player.width > p.x &&
+          player.x < p.x + p.width &&
+          player.y + player.height > p.y &&
+          player.y + player.height < p.y + p.height + 20 &&
+          player.dy >= 0
+        ) {
+          if (p.type === "red") {
+            gameOver = true;
+          } else {
+            player.y = p.y - player.height;
+            player.dy = 0;
+            player.onGround = true;
+          }
+        }
+      });
+
+      if (player.y > canvas.height) {
+        gameOver = true;
+      }
+    }
+
+    function update() {
+      if (gameOver) return;
+
+      player.img = player.onGround ? images.player_walk : (player.dy < 0 ? images.player_jump : images.player_fall);
+
+      player.y += player.dy;
+      player.dy += GRAVITY;
+
+      if (player.onGround && keys["Space"]) {
+        player.dy = JUMP_FORCE;
+      }
+
+      player.x += SCROLL_SPEED;
+      cameraX = player.x - 150;
+
+      if (platforms[platforms.length - 1].x - cameraX < canvas.width) {
+        generatePlatform(platforms[platforms.length - 1].x + 200);
+      }
+
+      checkCollisions();
+    }
+
+    function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawBackground();
-
-      platforms.forEach(p => p.draw());
-      player.update();
-      player.draw();
+      drawBackground(cameraX);
+      drawPlatforms();
+      drawPlayer();
 
       if (gameOver) {
-        drawGameOver();
-      } else {
-        requestAnimationFrame(gameLoop);
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#fff";
+        ctx.font = "60px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2);
       }
-    };
+    }
 
-    document.addEventListener("keydown", e => {
-      if (e.code === "ArrowRight") player.vx = 4;
-      if (e.code === "ArrowLeft") player.vx = -4;
-      if (e.code === "Space" && player.onGround) player.vy = -18;
+    function loop() {
+      requestAnimationFrame(loop);
+      if (gameStarted && !gameOver) update();
+      draw();
+    }
+
+    const keys = {};
+    window.addEventListener("keydown", e => keys[e.code] = true);
+    window.addEventListener("keyup", e => keys[e.code] = false);
+
+    let cameraX = 0;
+
+    function startScreen() {
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(images.bg, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(images.btn_start, canvas.width / 2 - 150, canvas.height / 2 - 50, 300, 100);
+
+      canvas.addEventListener("click", function handleStartClick(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        if (
+          x > canvas.width / 2 - 150 &&
+          x < canvas.width / 2 + 150 &&
+          y > canvas.height / 2 - 50 &&
+          y < canvas.height / 2 + 50
+        ) {
+          gameStarted = true;
+          resetGame();
+          canvas.removeEventListener("click", handleStartClick);
+        }
+      });
+    }
+
+    loadImages(imagePaths, () => {
+      player.img = images.player_idle;
+      startScreen();
+      loop();
     });
-
-    document.addEventListener("keyup", e => {
-      if (e.code === "ArrowRight" || e.code === "ArrowLeft") player.vx = 0;
-    });
-
-    const startGame = async () => {
-      await loadAllImages();
-      initPlatforms();
-      gameLoop();
-    };
-
-    startGame();
   </script>
 </body>
 </html>
