@@ -2,179 +2,170 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LittleBrett Platformer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LittleBrett Game</title>
   <style>
-    body {
-      margin: 0;
-      background: #84d2f6;
-      overflow: hidden;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body, html { width: 100%; height: 100%; background: #82d0f7; overflow: hidden; font-family: sans-serif; }
+
     canvas {
       display: block;
+      background: url('bg.png') no-repeat center;
+      background-size: cover;
     }
-    #startBtn, #restartBtn {
+
+    #startBtn {
       position: absolute;
-      top: 40px;
+      top: 30px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 10;
-      background: transparent;
+      background: none;
       border: none;
       cursor: pointer;
+      z-index: 99;
     }
-    #restartBtn {
-      display: none;
+
+    #startBtn img {
+      width: 150px;
     }
   </style>
 </head>
 <body>
-  <img id="startBtn" src="btn_start.png" width="150" />
-  <img id="restartBtn" src="btn_start.png" width="150" />
-  <canvas id="gameCanvas" width="1280" height="640"></canvas>
+  <button id="startBtn"><img src="btn_start.png" alt="Start Game"></button>
+  <canvas id="gameCanvas" width="360" height="640"></canvas>
 
   <script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const startBtn = document.getElementById('startBtn');
-    const restartBtn = document.getElementById('restartBtn');
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
 
-    const images = {};
-    const imageFiles = {
-      brett_idle: 'brett_idle.png',
-      brett_jump: 'brett_jump.png',
-      brett_fall: 'brett_fall.png',
-      brett_down: 'brett_down.png',
-      brett_happy: 'brett_happy.png',
-      platform_green: 'platform_green.png',
-      bg: 'bg.png',
-      btc: 'btc.png',
-      eth: 'eth.png',
-      coin: 'coin.png'
+    const brett = {
+      x: 150,
+      y: 500,
+      width: 50,
+      height: 50,
+      vy: 0,
+      jumpPower: -12,
+      gravity: 0.6,
+      imgIdle: new Image(),
+      imgJump: new Image(),
+      imgFall: new Image(),
+      imgHappy: new Image(),
+      imgDown: new Image(),
+      sprite: null,
     };
 
-    let player, platforms, gameStarted = false, gameOver = false, win = false;
+    brett.imgIdle.src = "brett_idle.png";
+    brett.imgJump.src = "brett_jump.png";
+    brett.imgFall.src = "brett_fall.png";
+    brett.imgHappy.src = "brett_happy.png";
+    brett.imgDown.src = "brett_down.png";
+    brett.sprite = brett.imgIdle;
 
-    function loadImages(callback) {
-      let loaded = 0;
-      const total = Object.keys(imageFiles).length;
-      for (const key in imageFiles) {
-        images[key] = new Image();
-        images[key].src = imageFiles[key];
-        images[key].onload = () => {
-          loaded++;
-          if (loaded === total) callback();
-        };
+    const platformImg = new Image();
+    platformImg.src = "platform_green.png";
+
+    const coins = [
+      { img: new Image(), x: 80, y: 200 },
+      { img: new Image(), x: 220, y: 350 },
+      { img: new Image(), x: 150, y: 500 },
+    ];
+    coins[0].img.src = "btc.png";
+    coins[1].img.src = "eth.png";
+    coins[2].img.src = "coin.png";
+
+    const platforms = [];
+    const platformCount = 50;
+
+    function generatePlatforms() {
+      for (let i = 0; i < platformCount; i++) {
+        platforms.push({
+          x: Math.random() * (canvas.width - 70),
+          y: i * 120,
+        });
       }
-    }
-
-    function resetGame() {
-      player = {
-        x: 100,
-        y: 100,
-        width: 80,
-        height: 80,
-        vy: 0,
-        onGround: false
-      };
-
-      platforms = [
-        { x: 50, y: 500, width: 200 },
-        { x: 300, y: 400, width: 200 },
-        { x: 600, y: 300, width: 200 },
-        { x: 900, y: 200, width: 200 },
-        { x: 1150, y: 100, width: 100 } // final goal
-      ];
-
-      gameOver = false;
-      win = false;
-      restartBtn.style.display = 'none';
     }
 
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(images.bg, 0, 0, canvas.width, canvas.height);
 
+      // draw platforms
       platforms.forEach(p => {
-        ctx.drawImage(images.platform_green, p.x, p.y, p.width, 40);
+        ctx.drawImage(platformImg, p.x, p.y, 70, 20);
       });
 
-      if (gameOver) {
-        ctx.drawImage(images.brett_down, player.x, player.y, player.width, player.height);
-        return;
-      } else if (win) {
-        ctx.drawImage(images.brett_happy, player.x, player.y, player.width, player.height);
-        return;
-      } else {
-        ctx.drawImage(images.brett_idle, player.x, player.y, player.width, player.height);
-      }
+      // draw coins
+      coins.forEach(c => {
+        ctx.drawImage(c.img, c.x, c.y, 30, 30);
+      });
 
-      ctx.drawImage(images.btc, 1140, 20, 40, 40);
-      ctx.drawImage(images.eth, 1190, 20, 40, 40);
-      ctx.drawImage(images.coin, 1240, 20, 40, 40);
+      // draw Brett
+      ctx.drawImage(brett.sprite, brett.x, brett.y, brett.width, brett.height);
     }
 
     function update() {
-      if (gameOver || win) return;
+      brett.vy += brett.gravity;
+      brett.y += brett.vy;
 
-      player.vy += 1; // gravity
-      player.y += player.vy;
-      player.onGround = false;
-
-      for (let p of platforms) {
+      // collision
+      platforms.forEach(p => {
         if (
-          player.x < p.x + p.width &&
-          player.x + player.width > p.x &&
-          player.y + player.height < p.y + 20 &&
-          player.y + player.height > p.y - 10 &&
-          player.vy >= 0
+          brett.x + brett.width > p.x &&
+          brett.x < p.x + 70 &&
+          brett.y + brett.height > p.y &&
+          brett.y + brett.height < p.y + 10 &&
+          brett.vy >= 0
         ) {
-          player.y = p.y - player.height;
-          player.vy = 0;
-          player.onGround = true;
+          brett.vy = brett.jumpPower;
         }
+      });
+
+      // scroll up
+      if (brett.y < canvas.height / 2) {
+        const dy = canvas.height / 2 - brett.y;
+        brett.y = canvas.height / 2;
+        platforms.forEach(p => p.y += dy);
+        coins.forEach(c => c.y += dy);
       }
 
-      if (player.y > canvas.height) {
-        gameOver = true;
-        restartBtn.style.display = 'block';
+      // lose condition
+      if (brett.y > canvas.height) {
+        brett.sprite = brett.imgDown;
+        draw();
+        return cancelAnimationFrame(gameLoopId);
       }
 
-      if (player.x >= 1150 && player.y < 100) {
-        win = true;
-        restartBtn.style.display = 'block';
+      // win condition
+      const highestPlatform = platforms[platforms.length - 1];
+      if (highestPlatform && highestPlatform.y > canvas.height + 100) {
+        brett.sprite = brett.imgHappy;
+        draw();
+        return cancelAnimationFrame(gameLoopId);
       }
+
+      if (brett.vy < 0) brett.sprite = brett.imgJump;
+      else if (brett.vy > 5) brett.sprite = brett.imgFall;
+      else brett.sprite = brett.imgIdle;
     }
 
+    let gameLoopId;
     function gameLoop() {
       update();
       draw();
-      requestAnimationFrame(gameLoop);
+      gameLoopId = requestAnimationFrame(gameLoop);
     }
 
-    document.addEventListener('keydown', e => {
-      if (!gameStarted || gameOver || win) return;
-      if (e.key === 'ArrowRight') player.x += 20;
-      if (e.key === 'ArrowLeft') player.x -= 20;
-      if (e.key === ' ' && player.onGround) {
-        player.vy = -20;
-      }
-    });
-
-    startBtn.onclick = () => {
-      startBtn.style.display = 'none';
-      gameStarted = true;
-      resetGame();
+    function startGame() {
+      generatePlatforms();
+      document.getElementById("startBtn").style.display = "none";
       gameLoop();
-    };
+    }
 
-    restartBtn.onclick = () => {
-      resetGame();
-    };
-
-    loadImages(() => {
-      draw();
+    window.addEventListener("keydown", e => {
+      if (e.key === "ArrowLeft") brett.x -= 20;
+      if (e.key === "ArrowRight") brett.x += 20;
     });
+
+    document.getElementById("startBtn").addEventListener("click", startGame);
   </script>
 </body>
 </html>
