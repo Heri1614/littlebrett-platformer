@@ -3,168 +3,162 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LittleBrett: Surf & Jump</title>
+  <title>Littlebrett: Surf & Jump</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    canvas { display: block; background: #000; }
-    #startBtn {
+    canvas { display: block; background: #87CEEB; }
+    #restartBtn {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      z-index: 2;
+      padding: 20px 40px;
+      font-size: 24px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      display: none;
       cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <img id="startBtn" src="./img/ui/btn_start.png" width="200" />
-  <canvas id="gameCanvas"></canvas>
-
+  <canvas id="gameCanvas" width="800" height="400"></canvas>
+  <button id="restartBtn" onclick="startGame()">Restart</button>
   <script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
 
-    const startBtn = document.getElementById('startBtn');
+    const images = {};
+    const toLoad = [
+      "brett_idle", "brett_jump", "brett_fall", "brett_walk1",
+      "brett_down", "brett_happy", "platform_green", "bg",
+      "coin", "btc", "eth"
+    ];
 
-    // Assets
-    const bgImg = new Image(); bgImg.src = './img/backgrounds/bg.png';
-    const brettIdle = new Image(); brettIdle.src = './img/player/brett_idle.png';
-    const brettJump = new Image(); brettJump.src = './img/player/brett_jump.png';
-    const platformGreen = new Image(); platformGreen.src = './img/platforms/platform_green.png';
-    const platformRed = new Image(); platformRed.src = './img/platforms/platform_red.png';
+    let loaded = 0;
+    for (const name of toLoad) {
+      const img = new Image();
+      img.src = `${name}.png`;
+      img.onload = () => { loaded++; if (loaded === toLoad.length) startGame(); };
+      images[name] = img;
+    }
 
-    let gameStarted = false;
-    let scrollX = 0;
+    let player, platforms, collectibles, cameraX, gameOver, gameWin;
 
-    const brett = {
-      x: 100,
-      y: 0,
-      width: 80,
-      height: 80,
-      vx: 0,
-      vy: 0,
-      onGround: false
-    };
+    function startGame() {
+      document.getElementById("restartBtn").style.display = "none";
+      player = {
+        x: 100, y: 0, vx: 0, vy: 0,
+        width: 50, height: 50,
+        grounded: false
+      };
+      cameraX = 0;
+      gameOver = false;
+      gameWin = false;
 
-    const gravity = 1.5;
-    const jumpStrength = -20;
-    const moveSpeed = 6;
-    const platforms = [];
-
-    function generatePlatforms() {
-      let x = 100;
-      let y = canvas.height - 200;
-
+      platforms = [];
       for (let i = 0; i < 50; i++) {
-        const isRed = i > 10 && Math.random() < 0.2; // solo rojas después de la 10
         platforms.push({
-          x,
-          y,
-          type: isRed ? 'red' : 'green',
-          width: 150,
-          height: 30
+          x: 100 + i * 150,
+          y: 250 - Math.floor(Math.random() * 100),
+          width: 100,
+          height: 20
         });
-        x += 220 + Math.random() * 60; // separación razonable
-        y += Math.random() < 0.5 ? -30 : 30; // altura variable
       }
+      collectibles = platforms.map(p => ({
+        x: p.x + 30,
+        y: p.y - 30,
+        collected: false
+      }));
+
+      loop();
     }
 
-    function drawBackground() {
-      ctx.drawImage(bgImg, -scrollX * 0.5, 0, canvas.width * 2, canvas.height);
-    }
+    const keys = {};
+    document.addEventListener("keydown", e => keys[e.key] = true);
+    document.addEventListener("keyup", e => keys[e.key] = false);
 
-    function drawPlatforms() {
-      platforms.forEach(p => {
-        const img = p.type === 'green' ? platformGreen : platformRed;
-        ctx.drawImage(img, p.x - scrollX, p.y, p.width, p.height);
-      });
-    }
+    function loop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(images.bg, -cameraX, 0, canvas.width * 2, canvas.height);
 
-    function drawBrett() {
-      const sprite = brett.vy !== 0 ? brettJump : brettIdle;
-      ctx.drawImage(sprite, brett.x - scrollX, brett.y, brett.width, brett.height);
-    }
+      // Gravity
+      player.vy += 0.8;
+      player.grounded = false;
 
-    function applyPhysics() {
-      brett.vy += gravity;
-      brett.y += brett.vy;
-      brett.x += brett.vx;
+      // Move
+      if (keys["ArrowRight"]) player.vx = 5;
+      else if (keys["ArrowLeft"]) player.vx = -5;
+      else player.vx = 0;
 
-      brett.onGround = false;
+      if (keys[" "] && player.grounded) player.vy = -12;
 
+      player.x += player.vx;
+      player.y += player.vy;
+
+      // Platform collision
       for (const p of platforms) {
         if (
-          brett.x + brett.width > p.x &&
-          brett.x < p.x + p.width &&
-          brett.y + brett.height > p.y &&
-          brett.y + brett.height < p.y + 20 &&
-          brett.vy >= 0
+          player.x < p.x + p.width &&
+          player.x + player.width > p.x &&
+          player.y + player.height < p.y + 20 &&
+          player.y + player.height > p.y - 10 &&
+          player.vy >= 0
         ) {
-          if (p.type === 'red') {
-            endGame();
-            return;
-          }
-          brett.y = p.y - brett.height;
-          brett.vy = 0;
-          brett.onGround = true;
+          player.y = p.y - player.height;
+          player.vy = 0;
+          player.grounded = true;
         }
       }
 
-      if (brett.y > canvas.height) {
-        endGame();
+      // Camera follows
+      cameraX = player.x - 100;
+
+      // Draw platforms
+      for (const p of platforms) {
+        ctx.drawImage(images.platform_green, p.x - cameraX, p.y);
       }
 
-      scrollX = brett.x - 100;
-    }
-
-    function gameLoop() {
-      if (!gameStarted) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawBackground();
-      drawPlatforms();
-      drawBrett();
-      applyPhysics();
-      requestAnimationFrame(gameLoop);
-    }
-
-    function endGame() {
-      alert('Game Over!');
-      location.reload();
-    }
-
-    let keys = {};
-    window.addEventListener('keydown', e => {
-      keys[e.key] = true;
-      if (e.key === ' ' && brett.onGround) {
-        brett.vy = jumpStrength;
+      // Draw collectibles
+      for (const c of collectibles) {
+        if (!c.collected &&
+          player.x < c.x + 20 &&
+          player.x + player.width > c.x &&
+          player.y < c.y + 20 &&
+          player.y + player.height > c.y) {
+          c.collected = true;
+        }
+        if (!c.collected) ctx.drawImage(images.coin, c.x - cameraX, c.y);
       }
-    });
-    window.addEventListener('keyup', e => keys[e.key] = false);
 
-    function handleMovement() {
-      brett.vx = 0;
-      if (keys['ArrowRight'] || keys['d']) brett.vx = moveSpeed;
-      if (keys['ArrowLeft'] || keys['a']) brett.vx = -moveSpeed;
+      // Player out of bounds
+      if (player.y > canvas.height) {
+        gameOver = true;
+        ctx.drawImage(images.brett_down, player.x - cameraX, 200);
+        endGame(false);
+        return;
+      }
+
+      // Player wins
+      if (player.x > platforms[platforms.length - 1].x + 50) {
+        gameWin = true;
+        ctx.drawImage(images.brett_happy, player.x - cameraX, player.y);
+        endGame(true);
+        return;
+      }
+
+      // Draw player
+      const img = player.grounded ? images.brett_walk1 : (player.vy < 0 ? images.brett_jump : images.brett_fall);
+      ctx.drawImage(img, player.x - cameraX, player.y);
+
+      requestAnimationFrame(loop);
     }
 
-    function gameTick() {
-      if (!gameStarted) return;
-      handleMovement();
-      setTimeout(gameTick, 16);
+    function endGame(won) {
+      document.getElementById("restartBtn").style.display = "block";
     }
-
-    startBtn.onclick = () => {
-      generatePlatforms();
-      brett.x = platforms[0].x + 20;
-      brett.y = platforms[0].y - brett.height;
-      startBtn.style.display = 'none';
-      gameStarted = true;
-      gameLoop();
-      gameTick();
-    };
   </script>
 </body>
 </html>
