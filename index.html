@@ -1,98 +1,129 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
   <title>LittleBrett Platformer</title>
   <style>
     body {
       margin: 0;
       overflow: hidden;
+      background-color: #87CEFA;
     }
     canvas {
       display: block;
-      background: #87cefa;
     }
-    #startBtn {
+    #startButton {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
+      background: transparent;
+      border: none;
       cursor: pointer;
     }
   </style>
 </head>
 <body>
+  <button id="startButton">
+    <img src="btn_start.png" alt="Start">
+  </button>
   <canvas id="gameCanvas"></canvas>
-  <img id="startBtn" src="btn_start.png" alt="Start Game" onclick="startGame()" />
 
   <script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    let gameStarted = false;
-
-    const playerImg = new Image();
-    const jumpImg = new Image();
-    const downImg = new Image();
-    const winImg = new Image();
-    const platformImg = new Image();
-    const coinImgs = [new Image(), new Image(), new Image()];
-
-    playerImg.src = 'brett_idle.png';
-    jumpImg.src = 'brett_jump.png';
-    downImg.src = 'brett_down.png';
-    winImg.src = 'brett_happy.png';
-    platformImg.src = 'platform_green.png';
-    coinImgs[0].src = 'coin.png';
-    coinImgs[1].src = 'btc.png';
-    coinImgs[2].src = 'eth.png';
+    const startButton = document.getElementById("startButton");
 
     const gravity = 0.5;
+    const jumpStrength = -10;
+
+    let gameStarted = false;
+    let gameOver = false;
+    let gameWon = false;
 
     const player = {
       x: 100,
-      y: 300,
-      width: 60,
-      height: 60,
-      vy: 0,
-      onGround: false,
-      img: playerImg
+      y: 0,
+      width: 50,
+      height: 50,
+      velocityY: 0,
+      onGround: false
     };
 
     const platforms = [];
     const coins = [];
 
+    const images = {};
+    const imageSources = {
+      idle: "brett_idle.png",
+      jump: "brett_jump.png",
+      fall: "brett_fall.png",
+      happy: "brett_happy.png",
+      down: "brett_down.png",
+      coin: "coin.png",
+      btc: "btc.png",
+      eth: "eth.png",
+      platform: "platform_green.png"
+    };
+
+    for (const key in imageSources) {
+      const img = new Image();
+      img.src = imageSources[key];
+      images[key] = img;
+    }
+
     function createPlatforms() {
-      for (let i = 0; i < 50; i++) {
-        let x = 200 + i * 150;
-        let y = 300 + Math.sin(i) * 80;
-        platforms.push({ x, y, width: 100, height: 20 });
-        coins.push({ x: x + 30, y: y - 30, img: coinImgs[i % 3] });
+      platforms.push({ x: 100, y: canvas.height - 100, width: 150, height: 20 }); // base
+
+      for (let i = 1; i <= 50; i++) {
+        const x = 100 + i * 200;
+        const y = canvas.height - 100 - Math.random() * 150;
+        platforms.push({ x, y, width: 150, height: 20 });
+
+        const coinTypes = ['coin', 'btc', 'eth'];
+        const coinType = coinTypes[Math.floor(Math.random() * coinTypes.length)];
+        coins.push({
+          x: x + 50,
+          y: y - 40,
+          type: coinType,
+        });
       }
     }
 
     function drawPlayer() {
-      ctx.drawImage(player.img, player.x, player.y, player.width, player.height);
+      let img;
+      if (gameOver) {
+        img = images.down;
+      } else if (gameWon) {
+        img = images.happy;
+      } else if (player.velocityY < 0) {
+        img = images.jump;
+      } else if (player.velocityY > 1) {
+        img = images.fall;
+      } else {
+        img = images.idle;
+      }
+      ctx.drawImage(img, player.x - cameraX, player.y, player.width, player.height);
     }
 
     function drawPlatforms() {
       platforms.forEach(p => {
-        ctx.drawImage(platformImg, p.x, p.y, p.width, p.height);
+        ctx.drawImage(images.platform, p.x - cameraX, p.y, p.width, p.height);
       });
     }
 
     function drawCoins() {
       coins.forEach(c => {
-        ctx.drawImage(c.img, c.x, c.y, 30, 30);
+        ctx.drawImage(images[c.type], c.x - cameraX, c.y, 30, 30);
       });
     }
 
-    function update() {
-      player.vy += gravity;
-      player.y += player.vy;
+    function applyPhysics() {
+      player.velocityY += gravity;
+      player.y += player.velocityY;
       player.onGround = false;
 
       platforms.forEach(p => {
@@ -100,64 +131,67 @@
           player.x + player.width > p.x &&
           player.x < p.x + p.width &&
           player.y + player.height > p.y &&
-          player.y + player.height < p.y + p.height + player.vy
+          player.y + player.height < p.y + p.height &&
+          player.velocityY >= 0
         ) {
           player.y = p.y - player.height;
-          player.vy = 0;
+          player.velocityY = 0;
           player.onGround = true;
         }
       });
 
       if (player.y > canvas.height) {
-        player.img = downImg;
-        draw();
-        return cancelAnimationFrame(animation);
+        gameOver = true;
       }
 
-      if (player.x > platforms[49].x + 100) {
-        player.img = winImg;
-        draw();
-        return cancelAnimationFrame(animation);
+      if (player.x > platforms[platforms.length - 1].x) {
+        gameWon = true;
       }
-
-      if (keys["ArrowRight"]) player.x += 5;
-      if (keys["ArrowLeft"]) player.x -= 5;
-
-      draw();
     }
 
-    function draw() {
+    let cameraX = 0;
+
+    function gameLoop() {
+      if (!gameStarted) return;
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      applyPhysics();
+
       drawPlatforms();
       drawCoins();
       drawPlayer();
+
+      if (!gameOver && !gameWon) {
+        cameraX += 2;
+        player.x += 2;
+      }
+
+      requestAnimationFrame(gameLoop);
     }
 
-    let keys = {};
+    function jump() {
+      if (player.onGround && !gameOver && !gameWon) {
+        player.velocityY = jumpStrength;
+      }
+    }
+
+    startButton.addEventListener("click", () => {
+      startButton.style.display = "none";
+      gameStarted = true;
+      createPlatforms();
+      gameLoop();
+    });
+
     window.addEventListener("keydown", e => {
-      keys[e.key] = true;
-      if (e.key === " " && player.onGround) {
-        player.vy = -10;
-        player.img = jumpImg;
+      if (e.code === "Space") {
+        jump();
       }
     });
 
-    window.addEventListener("keyup", e => {
-      keys[e.key] = false;
-      if (player.onGround) player.img = playerImg;
+    window.addEventListener("touchstart", () => {
+      jump();
     });
-
-    let animation;
-    function gameLoop() {
-      update();
-      animation = requestAnimationFrame(gameLoop);
-    }
-
-    function startGame() {
-      document.getElementById("startBtn").style.display = "none";
-      createPlatforms();
-      gameLoop();
-    }
   </script>
 </body>
 </html>
